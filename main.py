@@ -19,6 +19,7 @@ import streamlit as st
 from dotenv import load_dotenv
 from pypdf import PdfReader
 from openai import OpenAI
+import openai
 
 
 # ────────────────────────────────────────────────────────────
@@ -33,21 +34,38 @@ if not OPENAI_API_KEY:
 client = OpenAI(api_key=OPENAI_API_KEY)    # Initialize client
 
 
-def call_gpt_4o_mini(system_prompt: str, user_prompt: str) -> list[dict]:
+def call_gpt_4o_mini(system_prompt: str, user_prompt: str, model: str = "gpt-4o") -> list[dict]:
     """
-    Minimal wrapper around OpenAI ChatCompletion (GPT‑4o mini).
+    Wrapper around OpenAI ChatCompletion.
     Expects the model to return valid JSON (list of objects).
+    
+    Args:
+        system_prompt: The system prompt to use
+        user_prompt: The user prompt to use
+        model: The model to use (defaults to gpt-4o)
+    
+    Returns:
+        list[dict]: The parsed JSON response
+        
+    Raises:
+        ValueError: If the model is invalid or not available
+        json.JSONDecodeError: If the response is not valid JSON
     """
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.2,
-    )
-    content = response.choices[0].message.content
-    return json.loads(content)             # raises if malformed
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.2,
+        )
+        content = response.choices[0].message.content
+        return json.loads(content)             # raises if malformed
+    except openai.NotFoundError:
+        raise ValueError(f"Model '{model}' not found or not available")
+    except openai.APIError as e:
+        raise ValueError(f"OpenAI API error: {str(e)}")
 
 
 # ────────────────────────────────────────────────────────────
@@ -143,7 +161,15 @@ if uploaded_pdf:
             options=[p.name for p in prompt_files],
             index=0,
         )
-        if st.button("Run GPT‑4o mini"):
+        
+        # Add model input field
+        model_name = st.text_input(
+            "Model to use",
+            value="gpt-4o",
+            help="Enter the OpenAI model name (e.g., gpt-4o, gpt-3.5-turbo)"
+        )
+        
+        if st.button("Run GPT"):
             text_file_candidates = list(TEXT_DIR.glob(f"{pdf_name}*.txt"))
             if not text_file_candidates:
                 st.error("🛑 No extracted text file found. Run 'Extract text' first.")
@@ -152,17 +178,21 @@ if uploaded_pdf:
                 text_file = max(text_file_candidates, key=os.path.getmtime)
                 raw_text = text_file.read_text()
                 system_prompt = (PROMPT_DIR / prompt_choice).read_text()
-                st.write("🔄 Calling GPT‑4o mini … (this may take a bit)")
+                st.write(f"🔄 Calling {model_name} … (this may take a bit)")
 
                 try:
-                    structured = call_gpt_4o_mini(system_prompt, raw_text)
+                    structured = call_gpt_4o_mini(system_prompt, raw_text, model=model_name)
+                except ValueError as e:
+                    st.error(f"Error: {str(e)}")
+                except json.JSONDecodeError:
+                    st.error("Error: Model response was not valid JSON")
                 except Exception as e:
-                    st.error(f"OpenAI error / JSON parse error: {e}")
+                    st.error(f"Unexpected error: {str(e)}")
                 else:
                     json_path = save_overwriting(JSON_DIR, pdf_name, ".json",
                                                  json.dumps(structured, indent=2))
                     st.success(f"✅ Structured JSON saved to **{json_path.name}**")
-                    st.json(structured[:2])  # show first two sections as sanity check
+                    st.json(structured)  # show first two sections as sanity check
 
     # 3.3  Textify JSON
     if st.button("Textify latest structured JSON"):
