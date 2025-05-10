@@ -1,0 +1,55 @@
+Task: You are given the full raw text of the Eli Lilly Q1 2025 earnings call transcript (including prepared remarks and Q&A). Your job is to transform this unstructured text into a structured, clean JSON format.
+
+Requirements and Steps:
+
+Clean the Text: Remove all unnecessary content such as:
+
+Disclaimers and Legal Boilerplate: Omit any forward-looking statements disclaimers or legal notices.
+
+Repeated Headers/Footers: If the transcript text has page headers, footers, or repeated titles on each page (e.g., company name, date, page numbers), remove those.
+
+Operator Instructions and Filler: Exclude non-content phrases like "(Operator Instructions)", cues for the Q&A queue, and other procedural remarks. Also remove conversational fillers that don’t add meaning (e.g., "Thank you," "Welcome," or "Next question, please," when they are just polite interjections or transitions).
+
+Keep Core Content: Do not remove or paraphrase any actual spoken content containing meaningful financial or operational information. Preserve all questions, answers, and commentary from speakers except the irrelevant pieces mentioned above.
+
+Identify Sections: Break the transcript into its logical sections:
+
+Introductory Section(s): Opening remarks by the Operator or Investor Relations host (e.g., welcome message, introductions of participants).
+
+Prepared Remarks: Speeches or prepared statements by executives (CEO, CFO, and any other presenters) delivered before the Q&A. Each speaker’s prepared remarks should be one section.
+
+Q&A Sessions: The interactive question-and-answer part of the call. Each question and its corresponding answer(s) should be grouped together as one section. There will likely be multiple Q&A sections (one per analyst question).
+
+Chunk and Label Sections: For each identified section, create a JSON object with the following fields:
+
+company: "Eli Lilly" (string) – The company name, same value for all sections.
+
+quarter: "Q1 2025" (string) – The quarter of the earnings call, same for all sections.
+
+type: "transcript" (string) – The type of document, same for all sections.
+
+section_type: "Prepared Remarks" or "Q&A" (string) – Use "Prepared Remarks" for the introduction and all executive prepared statements. Use "Q&A" for any question-answer section.
+
+speakers: (string) – The speaker or speakers in that section.
+
+For a prepared remarks section, this will typically be a single speaker (e.g., "CEO", "CFO", or the name/role of whoever is speaking). For example: "CEO" or "Dave Ricks (CEO)".
+
+For a Q&A section, list both the questioner and answerer. Use a format like "Analyst Name / CEO" or "Analyst (Firm) / CFO". If multiple executives answer a single question, include all of them. For example: "Analyst Name / CEO / CFO" if an analyst asks a question and both the CEO and CFO contribute to the answer.
+
+content: (string) – The cleaned text content of that section.
+
+For prepared remarks, this is the full speech or statement by that speaker, with all irrelevant text removed. Do not include phrases where the speaker yields to another (e.g., “Now I will turn it over to…” can be omitted, since the next chunk will identify the next speaker).
+
+For Q&A sections, this field should contain the question and the answer together. You can format it as dialogue (e.g., start the content with the analyst’s question, and then the executive’s answer). Make sure the question and answer are clearly delineated, either by using the speaker names or a "Q:" / "A:" label. Only include the actual question and answer content – omit extra politeness like greetings or thanks within the question/answer if they are not substantive.
+
+Output Format: Return a JSON array (list) of objects, where each object is one section as described above. The output should be valid JSON and machine-parseable. Do not include any text outside of the JSON array – no explanatory prose, no markdown, just the JSON data structure. Ensure proper JSON syntax (e.g., quotes around strings, commas between objects, escape special characters in the content if necessary).
+
+Additional guidelines:
+
+Semantic Clarity: Make sure each JSON chunk is a self-contained, coherent section of the call. The content should read smoothly (fix any obvious OCR errors or broken lines) and contain complete sentences from the transcript.
+
+Preserve Key Information: Keep all numbers, financial metrics, product names, guidance, and any other critical information exactly as stated in the transcript. The goal is to retain every important insight while dropping only the noise.
+
+Q&A Pairing: Every analyst question should be immediately followed by its answer in the same content field. Start a new JSON object for the next question from a different analyst. This means the "Q&A" sections in the output array should equal the number of questions asked. There should be no overlap or mixing between Q&A pairs.
+
+Now, perform the above steps on the provided transcript which is attached.
