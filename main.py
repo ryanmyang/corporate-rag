@@ -19,6 +19,7 @@ import streamlit as st
 from dotenv import load_dotenv
 from pypdf import PdfReader
 from openai import OpenAI
+import openai
 
 
 # ────────────────────────────────────────────────────────────
@@ -33,21 +34,45 @@ if not OPENAI_API_KEY:
 client = OpenAI(api_key=OPENAI_API_KEY)    # Initialize client
 
 
-def call_gpt_4o_mini(system_prompt: str, user_prompt: str) -> list[dict]:
+def call_gpt(system_prompt: str, user_prompt: str, model: str = "gpt-4o-2024-08-06") -> list[dict]:
     """
-    Minimal wrapper around OpenAI ChatCompletion (GPT‑4o mini).
+    Wrapper around OpenAI ChatCompletion for any GPT model.
     Expects the model to return valid JSON (list of objects).
+    
+    Args:
+        system_prompt: The system prompt to use
+        user_prompt: The user prompt to use
+        model: The model to use (defaults to gpt-4o-mini)
+    
+    Returns:
+        list[dict]: The parsed JSON response
+        
+    Raises:
+        ValueError: If the model is invalid or not available
+        json.JSONDecodeError: If the response is not valid JSON
+        openai.APIError: For other API-related errors
     """
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.2,
-    )
-    content = response.choices[0].message.content
-    return json.loads(content)             # raises if malformed
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.2,
+        )
+        content = response.choices[0].message.content
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError as e:
+            print("\n=== Raw Model Response ===")
+            print(content)
+            print("========================\n")
+            raise ValueError(f"Model response was not valid JSON: {str(e)}\nRaw response printed to console.")
+    except openai.NotFoundError:
+        raise ValueError(f"Model '{model}' not found or not available")
+    except openai.APIError as e:
+        raise ValueError(f"OpenAI API error: {str(e)}")
 
 
 # ────────────────────────────────────────────────────────────
@@ -118,7 +143,7 @@ def textify_structured_json(sections: list[dict]) -> list[str]:
 # ────────────────────────────────────────────────────────────
 # 3.  Streamlit UI
 # ────────────────────────────────────────────────────────────
-st.title("PDF → GPT‑4o mini → Structured JSON → Textified JSON")
+st.title("PDF → GPT → Structured JSON → Textified JSON")
 
 uploaded_pdf = st.file_uploader("Upload a PDF", type=["pdf"])
 if uploaded_pdf:
@@ -143,7 +168,7 @@ if uploaded_pdf:
             options=[p.name for p in prompt_files],
             index=0,
         )
-        if st.button("Run GPT‑4o mini"):
+        if st.button("Run GPT"):
             text_file_candidates = list(TEXT_DIR.glob(f"{pdf_name}*.txt"))
             if not text_file_candidates:
                 st.error("🛑 No extracted text file found. Run 'Extract text' first.")
@@ -152,12 +177,14 @@ if uploaded_pdf:
                 text_file = max(text_file_candidates, key=os.path.getmtime)
                 raw_text = text_file.read_text()
                 system_prompt = (PROMPT_DIR / prompt_choice).read_text()
-                st.write("🔄 Calling GPT‑4o mini … (this may take a bit)")
+                st.write("🔄 Calling GPT… (this may take a bit)")
 
                 try:
-                    structured = call_gpt_4o_mini(system_prompt, raw_text)
+                    structured = call_gpt(system_prompt, raw_text)
+                except ValueError as e:
+                    st.error(f"Error: {str(e)}")
                 except Exception as e:
-                    st.error(f"OpenAI error / JSON parse error: {e}")
+                    st.error(f"Unexpected error: {str(e)}")
                 else:
                     json_path = save_overwriting(JSON_DIR, pdf_name, ".json",
                                                  json.dumps(structured, indent=2))
